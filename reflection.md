@@ -7,6 +7,14 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+The initial design is built around three core actions a user needs to perform, each mapped to a class:
+
+1. **Add/manage a pet profile** — an `Owner` class holds the owner's name and preferences, and a `Pet` class holds basic pet info (name, species, breed). Together they answer "whose plan is this?" before any tasks are scheduled.
+2. **Add/edit a care task** — a `Task` class represents a single care item (title, duration, priority, and eventually recurrence), with methods to create and update a task. This keeps task data structured instead of living as loose dictionaries in the UI layer.
+3. **Generate and view today's plan** — a `Scheduler`/`Planner` class takes a list of `Task` objects plus constraints (e.g., total time available) and produces an ordered daily plan, along with the reasoning for why each task was included and in what order.
+
+This gives a clean separation: `Owner`/`Pet` model *who* the plan is for, `Task` models *what* needs to be done, and `Scheduler` models *how* those tasks get turned into a plan.
+
 **b. Design changes**
 
 - Did your design change during implementation?
@@ -69,3 +77,5 @@
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+ 

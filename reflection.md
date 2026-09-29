@@ -7,18 +7,23 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
-The initial design is built around three core actions a user needs to perform, each mapped to a class:
+The initial design is built around four classes, each with a single, focused responsibility:
 
-1. **Add/manage a pet profile** — an `Owner` class holds the owner's name and preferences, and a `Pet` class holds basic pet info (name, species, breed). Together they answer "whose plan is this?" before any tasks are scheduled.
-2. **Add/edit a care task** — a `Task` class represents a single care item (title, duration, priority, and eventually recurrence), with methods to create and update a task. This keeps task data structured instead of living as loose dictionaries in the UI layer.
-3. **Generate and view today's plan** — a `Scheduler`/`Planner` class takes a list of `Task` objects plus constraints (e.g., total time available) and produces an ordered daily plan, along with the reasoning for why each task was included and in what order.
+- **`Owner`** — holds the owner's name, preferences (e.g., preferred start time), and the list of `Pet`s they own. Responsible for answering "whose plan is this?" and letting preferences update over time via `update_preferences()`.
+- **`Pet`** — holds basic pet info (name, species, breed) and owns the list of `Task`s assigned to it. Responsible for adding/removing tasks and returning a pet's task list (`add_task()`, `remove_task()`, `get_tasks()`).
+- **`Task`** — represents a single care item (title, duration, priority, category, recurrence). Responsible for holding task data and allowing it to be edited (`edit()`), instead of living as loose dictionaries in the UI layer.
+- **`Scheduler`** — takes a list of `Task` objects plus a time constraint (`available_minutes`) and is responsible for turning them into an ordered daily plan: sorting by priority/duration (`sort_tasks()`), dropping tasks that don't fit (`filter_tasks()`), producing the plan (`generate_plan()`), and explaining the reasoning behind it (`explain_plan()`).
 
-This gives a clean separation: `Owner`/`Pet` model *who* the plan is for, `Task` models *what* needs to be done, and `Scheduler` models *how* those tasks get turned into a plan.
+This gives a clean separation: `Owner`/`Pet` model *who* the plan is for, `Task` models *what* needs to be done, and `Scheduler` models *how* those tasks get turned into a plan. `Task` and `Pet` are implemented as Python `dataclasses` since they are primarily data holders; `Scheduler` is a plain class since it holds no persistent state beyond the time constraint.
 
 **b. Design changes**
 
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
+
+While reviewing the class skeleton against the UML, I noticed `Task` had no unique identifier — `Pet.remove_task()` and `Task.edit()` would have had to rely on Python dataclass field equality to find the right task. Since two tasks can easily share identical values (e.g., two "Morning walk, 20 min, high priority" entries for the same pet), that equality check could match the wrong task and silently corrupt the wrong entry. I added an `id: str` field to `Task`, generated automatically with `uuid.uuid4()` at construction, so every task has a stable identity independent of its data. This was a design change made *before* implementing the actual method logic, so `remove_task`/`edit` can be written against `task.id` instead of value equality once the scheduling logic is filled in.
+
+I also dropped an earlier idea (from initial brainstorming) of a separate `Plan`/`PlanEntry` class to represent the scheduler's output. The final design has `Scheduler.generate_plan()` return a plain list instead, since a dedicated result class added complexity without a clear responsibility beyond what `Scheduler` itself already tracks.
 
 ---
 

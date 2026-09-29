@@ -3,6 +3,7 @@ classDiagram
         +string name
         +dict preferences
         +update_preferences(prefs) void
+        +get_all_tasks() list~Task~
     }
 
     class Pet {
@@ -20,12 +21,17 @@ classDiagram
         +string priority
         +string category
         +string recurrence
+        +bool completed
+        +string id
         +edit(fields) void
+        +mark_complete() void
+        +mark_incomplete() void
     }
 
     class Scheduler {
         +int available_minutes
         +generate_plan(tasks) list
+        +generate_plan_for_owner(owner) list
         +sort_tasks(tasks) list~Task~
         +filter_tasks(tasks) list~Task~
         +explain_plan(plan) string
@@ -34,3 +40,4 @@ classDiagram
     Owner "1" --> "*" Pet : owns
     Pet "1" --> "*" Task : has
     Scheduler ..> Task : schedules
+    Scheduler ..> Owner : retrieves tasks from

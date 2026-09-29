@@ -23,6 +23,7 @@ class Task:
     priority: str
     category: str = ""
     recurrence: str = ""
+    preferred_time: str | None = None
     completed: bool = False
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
@@ -62,6 +63,23 @@ class Pet:
         """Return a copy of this pet's task list."""
         return list(self.tasks)
 
+    def complete_task(self, task: Task) -> Task | None:
+        """Mark a task complete; if it recurs, add a fresh pending copy for the next occurrence."""
+        task.mark_complete()
+        if not task.recurrence:
+            return None
+
+        next_task = Task(
+            title=task.title,
+            duration_minutes=task.duration_minutes,
+            priority=task.priority,
+            category=task.category,
+            recurrence=task.recurrence,
+            preferred_time=task.preferred_time,
+        )
+        self.add_task(next_task)
+        return next_task
+
 
 @dataclass
 class Owner:
@@ -72,6 +90,10 @@ class Owner:
     def update_preferences(self, prefs: dict) -> None:
         """Merge the given preferences into this owner's existing preferences."""
         self.preferences.update(prefs)
+
+    def add_pet(self, pet: Pet) -> None:
+        """Add a pet to this owner's list of pets."""
+        self.pets.append(pet)
 
     def get_all_tasks(self) -> list[Task]:
         """Tasks across every pet this owner has, for scheduling all of them together."""
@@ -124,6 +146,21 @@ class Scheduler:
             )
             current = end
         return plan
+
+    def detect_conflicts(self, tasks: list[Task]) -> list[tuple[Task, Task]]:
+        """Flag pairs of tasks that share the same preferred_time."""
+        by_time: dict[str, list[Task]] = {}
+        for task in tasks:
+            if not task.preferred_time:
+                continue
+            by_time.setdefault(task.preferred_time, []).append(task)
+
+        conflicts = []
+        for same_time_tasks in by_time.values():
+            for i in range(len(same_time_tasks)):
+                for j in range(i + 1, len(same_time_tasks)):
+                    conflicts.append((same_time_tasks[i], same_time_tasks[j]))
+        return conflicts
 
     def generate_plan_for_owner(self, owner: Owner, start_time: str = DEFAULT_START_TIME) -> list[dict]:
         """Retrieve tasks across all of the owner's pets and build one combined plan from them."""

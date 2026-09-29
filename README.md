@@ -57,18 +57,32 @@ Total time used: 45/60 minutes.
 
 ## 🧪 Testing PawPal+
 
-```bash
-# Run the full test suite:
-pytest
+Run the test suite with:
 
-# Run with coverage:
-pytest --cov
+```bash
+python3 -m pytest
 ```
+
+The suite in `tests/test_pawpal.py` covers:
+
+- **Sorting correctness** — `Scheduler.generate_plan()` returns tasks in chronological (non-decreasing start time) order.
+- **Recurrence logic** — completing a task with a `recurrence` value (e.g., `"daily"`) via `Pet.complete_task()` creates a new pending task for the next occurrence.
+- **Conflict detection** — `Scheduler.detect_conflicts()` flags tasks that share the same `preferred_time`.
+- **Task completion** — `Task.mark_complete()` correctly updates a task's `completed` status.
+- **Task addition** — `Pet.add_task()` increases that pet's task count.
 
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+platform darwin -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/nafissah/AI-PawPal-pet-app
+plugins: anyio-4.15.1
+collected 5 items
+
+tests/test_pawpal.py .....                                               [100%]
+
+============================== 5 passed in 0.01s ===============================
 ```
 
 ## 📐 Smarter Scheduling

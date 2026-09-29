@@ -67,6 +67,19 @@ I also dropped an earlier idea (from initial brainstorming) of a separate `Plan`
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
 
+**Confidence Level: ⭐⭐⭐☆☆ (3/5)**
+
+The core scheduling path is well-covered and passing: priority/duration-based sorting, time-budget filtering, chronological plan ordering, task completion, and recurrence-driven task creation all have tests and behave correctly ([tests/test_pawpal.py](tests/test_pawpal.py), 5/5 passing). That gives me confidence in the everyday "add tasks → generate today's plan" flow.
+
+I'm holding back from a higher rating because of gaps the current tests don't touch:
+
+- **`detect_conflicts()` isn't wired into `generate_plan()`** — it can flag two tasks sharing a `preferred_time`, but `generate_plan()` ignores `preferred_time` entirely and just lays tasks out sequentially. So conflicts are *detectable* on request, not *prevented* during actual scheduling. This is the biggest known gap.
+- **No boundary tests** — zero/negative `available_minutes`, a task exactly equal to the remaining time, or an empty task list are all untested.
+- **No multi-pet plan test** — `generate_plan_for_owner()` aggregates tasks across pets, but no test confirms tasks from two different pets both show up correctly in one combined plan.
+- **Recurrence has no real date tracking** — `complete_task()` creates a "next occurrence" task, but there's no due-date concept, so nothing stops a recurring task from being completed (and regenerated) multiple times in the same day.
+
+If I had more time, I'd prioritize wiring `preferred_time`/`detect_conflicts()` into `generate_plan()` first, since an unused field that looks load-bearing is the riskiest kind of gap, then add the boundary and multi-pet tests.
+
 ---
 
 ## 5. Reflection

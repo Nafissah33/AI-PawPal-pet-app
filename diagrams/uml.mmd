@@ -4,6 +4,7 @@ classDiagram
         +dict preferences
         +update_preferences(prefs) void
         +get_all_tasks() list~Task~
+        +add_pet(pet) void
     }
 
     class Pet {
@@ -13,6 +14,7 @@ classDiagram
         +add_task(task) void
         +remove_task(task) void
         +get_tasks() list~Task~
+        +complete_task(task) Task
     }
 
     class Task {
@@ -21,6 +23,7 @@ classDiagram
         +string priority
         +string category
         +string recurrence
+        +string preferred_time
         +bool completed
         +string id
         +edit(fields) void
@@ -34,6 +37,7 @@ classDiagram
         +generate_plan_for_owner(owner) list
         +sort_tasks(tasks) list~Task~
         +filter_tasks(tasks) list~Task~
+        +detect_conflicts(tasks) list
         +explain_plan(plan) string
     }
 

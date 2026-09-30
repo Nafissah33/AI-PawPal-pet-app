@@ -2,9 +2,10 @@ classDiagram
     class Owner {
         +string name
         +dict preferences
+        +List~Pet~ pets
         +update_preferences(prefs) void
-        +get_all_tasks() list~Task~
         +add_pet(pet) void
+        +get_all_tasks() list~Task~
         +to_dict() dict
         +from_dict(data) Owner
         +save_to_json(filepath) void
@@ -15,6 +16,7 @@ classDiagram
         +string name
         +string species
         +string breed
+        +List~Task~ tasks
         +add_task(task) void
         +remove_task(task) void
         +get_tasks() list~Task~
@@ -42,16 +44,17 @@ classDiagram
 
     class Scheduler {
         +int available_minutes
-        +generate_plan(tasks, start_time, today) list
-        +generate_plan_for_owner(owner, start_time, today) list
         +sort_tasks(tasks) list~Task~
         +filter_tasks(tasks, today) list~Task~
         +detect_conflicts(tasks) list
         +find_next_available_slot(plan, duration_minutes) string
+        +generate_plan(tasks, start_time, today) list
+        +generate_plan_for_owner(owner, start_time, today) list
         +explain_plan(plan) string
     }
 
-    Owner "1" --> "*" Pet : owns
-    Pet "1" --> "*" Task : has
-    Scheduler ..> Task : schedules
-    Scheduler ..> Owner : retrieves tasks from
+    Owner "1" *-- "*" Pet : owns
+    Pet "1" *-- "*" Task : has
+    Pet ..> Task : creates next occurrence (complete_task)
+    Scheduler ..> Task : sorts, filters, schedules
+    Scheduler ..> Owner : retrieves tasks from (generate_plan_for_owner)

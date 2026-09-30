@@ -48,10 +48,22 @@ I also dropped an earlier idea (from initial brainstorming) of a separate `Plan`
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 - What kinds of prompts or questions were most helpful?
 
+I used Claude Code end-to-end: object-model brainstorming, UML drafting/refinement, class skeletons, scheduling logic, Streamlit wiring, tests, and this reflection. The most useful feature was that it verified its own work — running `pytest` and booting the app after each change — so I was reviewing confirmed-working code, not untested claims. Asking it to review the code for edge cases *before* writing tests also surfaced real gaps (like tasks having no unique id) instead of just testing whatever existed.
+
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
 - How did you evaluate or verify what the AI suggested?
+
+I once asked it to save the diagram as `diagrams/uml_draft.mmd`, following an instruction sheet literally. It flagged that git history already showed that filename renamed to `uml.mmd` "to match grading expectation," so recreating it would undo that fix. I checked `git log --follow` myself to confirm, then kept `uml.mmd` instead of following the instruction as written.
+
+- How did using separate chat sessions for different phases help you stay organized?
+
+Splitting work into phases (UML, skeletons, logic, UI, tests, polish) kept each session focused on verifying one layer before moving to the next, so testing started from an already-stable backend instead of a moving target. Starting fresh for the final UML review also forced an explicit "does this still match the code?" check rather than assuming consistency.
+
+- Summarize what you learned about being the "lead architect"
+
+The AI implements fast but has no sense of which changes are actually safe — it would have happily dropped `priority` to match a pasted spec if I'd let it, breaking the scheduler. Being lead architect meant constantly asking "does this still match the design, and what did it break?" rather than just accepting output.
 
 ---
 
@@ -69,16 +81,17 @@ I also dropped an earlier idea (from initial brainstorming) of a separate `Plan`
 
 **Confidence Level: ⭐⭐⭐☆☆ (3/5)**
 
-The core scheduling path is well-covered and passing: priority/duration-based sorting, time-budget filtering, chronological plan ordering, task completion, and recurrence-driven task creation all have tests and behave correctly ([tests/test_pawpal.py](tests/test_pawpal.py), 5/5 passing). That gives me confidence in the everyday "add tasks → generate today's plan" flow.
+The core scheduling path is well-covered and passing: priority-then-time sorting, time-budget filtering, chronological plan ordering, task completion, date-aware recurrence, conflict detection with a suggested fix, and JSON persistence all have tests and behave correctly ([tests/test_pawpal.py](tests/test_pawpal.py), 10/10 passing). That gives me confidence in the everyday "add tasks → generate today's plan" flow.
 
-I'm holding back from a higher rating because of gaps the current tests don't touch:
+**Resolved since the original 3/5 rating:** recurrence now tracks a real `due_date` — `Pet.complete_task()` computes the actual next occurrence date (`+1 day` for daily, `+7 days` for weekly) instead of an immediately-pending clone, and `Scheduler.filter_tasks()`/`generate_plan()` now skip any task whose `due_date` is still in the future. A weekly task can no longer be completed and regenerated multiple times in the same day.
 
-- **`detect_conflicts()` isn't wired into `generate_plan()`** — it can flag two tasks sharing a `preferred_time`, but `generate_plan()` ignores `preferred_time` entirely and just lays tasks out sequentially. So conflicts are *detectable* on request, not *prevented* during actual scheduling. This is the biggest known gap.
+I'm still holding back from a 5/5 because of gaps the current tests don't touch:
+
+- **`generate_plan()` still ignores `preferred_time` for actual placement** — `find_next_available_slot()` can *suggest* a conflict-free time, but the plan itself still lays tasks out sequentially from the day's start regardless of any preferred time. Suggestions exist; enforcement doesn't yet.
 - **No boundary tests** — zero/negative `available_minutes`, a task exactly equal to the remaining time, or an empty task list are all untested.
 - **No multi-pet plan test** — `generate_plan_for_owner()` aggregates tasks across pets, but no test confirms tasks from two different pets both show up correctly in one combined plan.
-- **Recurrence has no real date tracking** — `complete_task()` creates a "next occurrence" task, but there's no due-date concept, so nothing stops a recurring task from being completed (and regenerated) multiple times in the same day.
 
-If I had more time, I'd prioritize wiring `preferred_time`/`detect_conflicts()` into `generate_plan()` first, since an unused field that looks load-bearing is the riskiest kind of gap, then add the boundary and multi-pet tests.
+If I had more time, I'd prioritize making `generate_plan()` actually honor `preferred_time` during placement next, since that's the same "field exists but isn't fully load-bearing" pattern that recurrence just got fixed for, then add the boundary and multi-pet tests.
 
 ---
 

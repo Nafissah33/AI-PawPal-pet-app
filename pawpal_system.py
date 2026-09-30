@@ -8,12 +8,24 @@ Mirrors diagrams/uml.mmd.
 from __future__ import annotations
 
 import dataclasses
+import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 DEFAULT_START_TIME = "08:00"
+DEFAULT_DATA_FILE = "data.json"
 _PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
+_RECURRENCE_INTERVAL_DAYS = {"daily": 1, "weekly": 7}
+PRIORITY_ICONS = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
+
+
+def _next_due_date(recurrence: str, from_date: date) -> date | None:
+    """Compute the next due date for a recurrence value, or None if it doesn't recur."""
+    interval_days = _RECURRENCE_INTERVAL_DAYS.get(recurrence)
+    if interval_days is None:
+        return None
+    return from_date + timedelta(days=interval_days)
 
 
 @dataclass
@@ -24,6 +36,7 @@ class Task:
     category: str = ""
     recurrence: str = ""
     preferred_time: str | None = None
+    due_date: str | None = None
     completed: bool = False
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
@@ -42,6 +55,15 @@ class Task:
     def mark_incomplete(self) -> None:
         """Mark this task as not completed."""
         self.completed = False
+
+    def to_dict(self) -> dict:
+        """Convert this task to a plain, JSON-serializable dict."""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Reconstruct a Task from a dict produced by to_dict()."""
+        return cls(**data)
 
 
 @dataclass
@@ -63,10 +85,13 @@ class Pet:
         """Return a copy of this pet's task list."""
         return list(self.tasks)
 
-    def complete_task(self, task: Task) -> Task | None:
-        """Mark a task complete; if it recurs, add a fresh pending copy for the next occurrence."""
+    def complete_task(self, task: Task, completed_on: date | None = None) -> Task | None:
+        """Mark a task complete; if it recurs, schedule its next occurrence on the correct future date."""
+        completed_on = completed_on or date.today()
         task.mark_complete()
-        if not task.recurrence:
+
+        next_due = _next_due_date(task.recurrence, completed_on)
+        if next_due is None:
             return None
 
         next_task = Task(
@@ -76,9 +101,24 @@ class Pet:
             category=task.category,
             recurrence=task.recurrence,
             preferred_time=task.preferred_time,
+            due_date=next_due.isoformat(),
         )
         self.add_task(next_task)
         return next_task
+
+    def to_dict(self) -> dict:
+        """Convert this pet (and its tasks) to a plain, JSON-serializable dict."""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Pet":
+        """Reconstruct a Pet (and its tasks) from a dict produced by to_dict()."""
+        return cls(
+            name=data["name"],
+            species=data["species"],
+            breed=data.get("breed", ""),
+            tasks=[Task.from_dict(t) for t in data.get("tasks", [])],
+        )
 
 
 @dataclass
@@ -99,6 +139,31 @@ class Owner:
         """Tasks across every pet this owner has, for scheduling all of them together."""
         return [task for pet in self.pets for task in pet.get_tasks()]
 
+    def to_dict(self) -> dict:
+        """Convert this owner (and all pets/tasks) to a plain, JSON-serializable dict."""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Owner":
+        """Reconstruct an Owner (and all pets/tasks) from a dict produced by to_dict()."""
+        return cls(
+            name=data["name"],
+            preferences=data.get("preferences", {}),
+            pets=[Pet.from_dict(p) for p in data.get("pets", [])],
+        )
+
+    def save_to_json(self, filepath: str = DEFAULT_DATA_FILE) -> None:
+        """Persist this owner, and all of their pets and tasks, to a JSON file."""
+        with open(filepath, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+    @classmethod
+    def load_from_json(cls, filepath: str = DEFAULT_DATA_FILE) -> "Owner":
+        """Load an owner, and all of their pets and tasks, from a JSON file."""
+        with open(filepath) as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
 
 class Scheduler:
     def __init__(self, available_minutes: int):
@@ -106,28 +171,39 @@ class Scheduler:
         self.available_minutes = available_minutes
 
     def sort_tasks(self, tasks: list[Task]) -> list[Task]:
-        """Highest priority first; shorter tasks first as a tie-breaker so more tasks fit."""
+        """Highest priority first. Within the same priority, tasks with a set preferred_time
+        are ordered chronologically; tasks without one are tie-broken by shortest duration."""
         return sorted(
             tasks,
-            key=lambda t: (_PRIORITY_RANK.get(t.priority, len(_PRIORITY_RANK)), t.duration_minutes),
+            key=lambda t: (
+                _PRIORITY_RANK.get(t.priority, len(_PRIORITY_RANK)),
+                0 if t.preferred_time else 1,
+                t.preferred_time or "",
+                t.duration_minutes,
+            ),
         )
 
-    def filter_tasks(self, tasks: list[Task]) -> list[Task]:
-        """Greedily keep not-yet-completed tasks that still fit in the remaining time."""
+    def filter_tasks(self, tasks: list[Task], today: date | None = None) -> list[Task]:
+        """Greedily keep not-yet-completed, already-due tasks that still fit in the remaining time."""
+        today = today or date.today()
         selected = []
         remaining = self.available_minutes
         for task in tasks:
             if task.completed:
+                continue
+            if task.due_date and date.fromisoformat(task.due_date) > today:
                 continue
             if task.duration_minutes <= remaining:
                 selected.append(task)
                 remaining -= task.duration_minutes
         return selected
 
-    def generate_plan(self, tasks: list[Task], start_time: str = DEFAULT_START_TIME) -> list[dict]:
+    def generate_plan(
+        self, tasks: list[Task], start_time: str = DEFAULT_START_TIME, today: date | None = None
+    ) -> list[dict]:
         """Sort and filter the given tasks, then lay them out sequentially starting at start_time."""
         ordered = self.sort_tasks(tasks)
-        selected = self.filter_tasks(ordered)
+        selected = self.filter_tasks(ordered, today=today)
 
         plan = []
         current = datetime.strptime(start_time, "%H:%M")
@@ -162,9 +238,31 @@ class Scheduler:
                     conflicts.append((same_time_tasks[i], same_time_tasks[j]))
         return conflicts
 
-    def generate_plan_for_owner(self, owner: Owner, start_time: str = DEFAULT_START_TIME) -> list[dict]:
+    def find_next_available_slot(
+        self, plan: list[dict], duration_minutes: int, preferred_time: str | None = None
+    ) -> str:
+        """Find the earliest time (from preferred_time onward) that doesn't overlap any entry in plan."""
+        candidate = datetime.strptime(preferred_time or DEFAULT_START_TIME, "%H:%M")
+
+        busy = sorted(
+            (datetime.strptime(entry["start_time"], "%H:%M"), datetime.strptime(entry["end_time"], "%H:%M"))
+            for entry in plan
+        )
+
+        for busy_start, busy_end in busy:
+            candidate_end = candidate + timedelta(minutes=duration_minutes)
+            if candidate_end <= busy_start:
+                break
+            if candidate < busy_end:
+                candidate = busy_end
+
+        return candidate.strftime("%H:%M")
+
+    def generate_plan_for_owner(
+        self, owner: Owner, start_time: str = DEFAULT_START_TIME, today: date | None = None
+    ) -> list[dict]:
         """Retrieve tasks across all of the owner's pets and build one combined plan from them."""
-        return self.generate_plan(owner.get_all_tasks(), start_time=start_time)
+        return self.generate_plan(owner.get_all_tasks(), start_time=start_time, today=today)
 
     def explain_plan(self, plan: list[dict]) -> str:
         """Render a plan as a human-readable, multi-line summary string."""
@@ -174,10 +272,7 @@ class Scheduler:
         lines = [f"Daily plan ({self.available_minutes} minutes available):"]
         for entry in plan:
             task = entry["task"]
-            lines.append(
-                f"  {entry['start_time']}-{entry['end_time']}  {task.title} "
-                f"({task.priority} priority, {task.duration_minutes} min)"
-            )
+            lines.append(f"  {entry['start_time']}-{entry['end_time']}  {task.title} — {entry['reason']}")
         total_used = sum(entry["task"].duration_minutes for entry in plan)
         lines.append(f"Total time used: {total_used}/{self.available_minutes} minutes.")
         return "\n".join(lines)
